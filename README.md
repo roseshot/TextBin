@@ -104,20 +104,13 @@ bun run deploy
 
 For a public instance, consider configuring `WRITE_TOKEN` to restrict uploads. Anonymous writing remains the default by design. Review the Workers Free and Durable Objects quotas for your expected usage.
 
-## Dependency updates and automatic merging
+## Dependency updates and GitHub auto-merge
 
 Dependabot checks Bun dependencies (`package.json` and `bun.lock`) and GitHub Actions every **Monday at 09:00 UTC**. It opens at most five version-update PRs per ecosystem.
 
-After the `CI` workflow succeeds for a Dependabot PR, `.github/workflows/merge-dependabot.yml` uses a separate, trusted workflow to squash-merge eligible changes. It never executes untrusted pull-request code with write permissions.
+This repository uses GitHub's native **Allow auto-merge** setting. There is no custom Dependabot merge workflow or privileged merge script. Dependabot does not automatically enable native auto-merge for each PR: enable it on the desired PR, or arrange separate trusted automation to opt in.
 
-Automatic merging is deliberately restricted:
-
-- Only single-dependency stable SemVer patch/minor updates are eligible. Major updates, prereleases, grouped updates, and `0.x` minor updates need manual review.
-- Bun updates may change only `package.json` and `bun.lock`.
-- GitHub Actions updates may change only `.github/workflows/ci.yml`. Changes to the privileged merge workflow are never auto-merged.
-- The PR's current head and base revisions must match the successful CI run. A changed PR needs a fresh successful run.
-
-This automation merges directly **after CI succeeds**, so it does not require GitHub's repository-level `Allow auto-merge` setting. It does not replace branch protection; maintainers should separately require the `Typecheck, test, and bundle` check on `main` for all PRs.
+To ensure a PR waits for CI before merging, protect `main` with the required **Typecheck, test, and bundle** status check. Without required checks or reviews, selecting native auto-merge may merge a PR immediately. Review major, prerelease, and breaking updates before enabling auto-merge.
 
 ## Development and CI
 
