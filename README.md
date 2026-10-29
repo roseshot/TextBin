@@ -113,6 +113,6 @@ bunx wrangler deploy --dry-run  # Validate the Worker bundle without deploying
 
 GitHub Actions runs these checks on pushes to `main`, pull requests, and manual dispatch. CI uses `actions/checkout@v7` and `oven-sh/setup-bun@v2`; it does **not** deploy to Cloudflare or require deployment credentials.
 
-Bun manages dependencies and runs the tests. Wrangler is invoked via `bunx wrangler` **without `--bun`** because its CLI requires Node.js. The deployed Worker runs on Cloudflare's `workerd`, not Node.js. CI pins Bun to a specific version and uses stable TypeScript. The dependency lockfile should be generated and committed using `bun install`; until then, CI installs are non-frozen.
+Bun manages dependencies and runs the tests. Wrangler is invoked via `bunx wrangler` **without `--bun`** because its CLI requires Node.js. The deployed Worker runs on Cloudflare's `workerd`, not Node.js. CI pins Bun to a specific version and uses stable TypeScript. `bun.lock` is committed, and CI uses `bun install --frozen-lockfile` for reproducible installs.
 
 For implementation details and acceptance criteria, see [docs/PLAN.md](docs/PLAN.md). License details are in [LICENSE](LICENSE).

@@ -31,13 +31,7 @@ jobs:
           bun-version: 1.4.4
 
       - name: Install dependencies
-        run: bun install
-
-      - name: Record dependency lock for reproducibility
-        run: |
-          echo LOCKFILE_B64_START
-          base64 -w0 bun.lock | fold -w2000 | sed 's/^/LOCKFILE_PART:/'
-          echo LOCKFILE_B64_END
+        run: bun install --frozen-lockfile
 
       - name: Typecheck
         run: bun run typecheck
@@ -51,9 +45,9 @@ jobs:
       - name: Worker integration smoke test
         shell: bash
         run: |
-          bunx wrangler dev --local --ip 127.0.0.1 --port 8787 --var TTL_SECONDS:2 > /tmp/textbin-worker.log 2>&1 &
+          bunx wrangler dev --local --ip 127.0.0.1 --port 8787 > /tmp/textbin-worker.log 2>&1 &
           worker_pid=$!
-          trap 'kill "$worker_pid" 2>/dev/null || true' EXIT
+          trap 'exit_code=$?; if [ "$exit_code" -ne 0 ]; then cat /tmp/textbin-worker.log; fi; kill "$worker_pid" 2>/dev/null || true' EXIT
           ready=0
           for attempt in $(seq 1 60); do
             if curl -fsS http://127.0.0.1:8787/ >/dev/null 2>&1; then
@@ -66,6 +60,6 @@ jobs:
           status=$(curl -sS -o /dev/null -w '%{http_code}' -X POST http://127.0.0.1:8787/ -H 'content-type: application/json' -d '{"smoke":"working"}')
           test "$status" = 204
           curl -fsS http://127.0.0.1:8787/ | grep -q 'working'
-          sleep 3
-          curl -fsS http://127.0.0.1:8787/ | grep -q 'No data available.'
+          invalid_status=$(curl -sS -o /dev/null -w '%{http_code}' -X POST http://127.0.0.1:8787/ -H 'content-type: application/json' -d '{"received_at":"forged"}')
+          test "$invalid_status" = 422
 
