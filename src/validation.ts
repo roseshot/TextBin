@@ -42,7 +42,7 @@ export async function readBodyWithinLimit(
   }
 
   const reader = request.body.getReader();
-  const decoder = new TextDecoder("utf-8", { fatal: true });
+  const decoder = new TextDecoder("utf-8", { fatal: true, ignoreBOM: false });
   let bytes = 0;
   let text = "";
 

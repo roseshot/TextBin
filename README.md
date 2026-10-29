@@ -83,8 +83,8 @@ Data is stored in one **SQLite-backed Durable Object**. Each record has a server
 An optional `WRITE_TOKEN` secret protects POST. **Set it before publicly deploying**:
 
 ```sh
-bunx --bun wrangler login
-bunx --bun wrangler secret put WRITE_TOKEN
+bunx wrangler login
+bunx wrangler secret put WRITE_TOKEN
 bun run deploy
 ```
 
@@ -92,7 +92,7 @@ If `WRITE_TOKEN` is configured, include `Authorization: Bearer <token>` when upl
 
 ## Continuous integration
 
-GitHub Actions runs on pushes to `main`, pull requests, and manual dispatch. It uses the latest major-version action tags (`actions/checkout@v6` and `oven-sh/setup-bun@v2`) to install Bun, typecheck TypeScript, run Bun tests, and verify the Wrangler production bundle with `deploy --dry-run`. The workflow does not deploy and does not require Cloudflare credentials.
+GitHub Actions runs on pushes to `main`, pull requests, and manual dispatch. It uses the latest major-version action tags (`actions/checkout@v7` and `oven-sh/setup-bun@v2`) to install Bun, typecheck TypeScript, run Bun tests, and verify the Wrangler production bundle with `deploy --dry-run`. The workflow does not deploy and does not require Cloudflare credentials.
 
 The repository does not yet include a `bun.lock` file, so CI uses `bun install`. Once a Bun-generated lockfile is committed, the install step can be tightened to `bun install --frozen-lockfile`.
 
@@ -106,7 +106,7 @@ bun run check
 
 `typecheck` first generates Worker type declarations via Wrangler, then checks the project with the pinned TypeScript 7.1 Beta for the ES2026 target. The lockfile `bun.lock` should be generated and committed after the first successful `bun install`.
 
-Bun is the intended **local toolchain**. The deployed Worker runs in Cloudflare's **workerd**, not Bun. Cloudflare officially supports Node.js as Wrangler's CLI runtime; `bunx --bun wrangler` is a deliberately Bun-first workflow and should be validated on the development machine.
+Bun manages dependencies and executes the project scripts and tests. Wrangler requires the supported Node.js CLI runtime, so `bunx wrangler` intentionally runs Wrangler through its Node.js shebang without `--bun`. This is only a build/development tool: the deployed Worker runs in Cloudflare's **workerd** and contains no Node.js application runtime APIs.
 
 For decisions, constraints, and acceptance criteria, see [docs/PLAN.md](docs/PLAN.md).
 

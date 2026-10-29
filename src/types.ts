@@ -7,6 +7,7 @@ export interface Env {
 }
 
 export interface StoredRecord {
+  [key: string]: string | number;
   payload: string;
   received_at: number;
 }

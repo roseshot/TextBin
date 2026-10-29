@@ -4,10 +4,10 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "bunx --bun wrangler dev",
-    "deploy": "bunx --bun wrangler deploy",
-    "types": "bunx --bun wrangler types",
-    "typecheck": "bun run types && bunx tsc --noEmit",
+    "dev": "bunx wrangler dev",
+    "deploy": "bunx wrangler deploy",
+    "types": "bunx wrangler types",
+    "typecheck": "bun run types && bunx --bun tsc --noEmit",
     "test": "bun test",
     "check": "bun run typecheck && bun test"
   },

@@ -57,7 +57,7 @@ On POST, `TTL_SECONDS` is read from the Wrangler `vars` binding and validated as
 - **Storage:** Durable Objects SQLite with Cloudflare declarative `exports` configuration.
 - **Type checking:** TypeScript 7.1 Beta with `ES2026` target and lib, strict mode.
 - **Local package manager, scripts, and tests:** Bun; no Node.js imports or Bun runtime APIs inside the deployed code.
-- **Wrangler:** executed via Bun-first scripts; compatibility must be checked locally as Wrangler's officially supported CLI runtime is Node.js.
+- **Wrangler CLI:** invoked through `bunx wrangler` (without `--bun`), allowing its supported Node.js CLI runtime. Bun remains the dependency manager, test runner, and script runner; the deployed Worker uses `workerd`.
 
 ## Guardrails
 
