@@ -1,33 +1,35 @@
 # TextBin
 
-**TextBin** is a temporary JSON inbox rendered as a Unicode plain-text board for `curl`. Send JSON to **POST /**, then use **GET /** to view **all** unexpired records, newest first. Each record includes the UTC time at which TextBin received it.
+[![CI](https://github.com/roseshot/TextBin/actions/workflows/ci.yml/badge.svg)](https://github.com/roseshot/TextBin/actions/workflows/ci.yml)
 
-Built for **Cloudflare Workers Free**, **SQLite-backed Durable Objects**, **TypeScript (ES2026)**, and **Bun**. No web frontend, per-record URLs, ORM, or application-level Node.js APIs.
+TextBin is a temporary JSON inbox for Cloudflare Workers. Send a JSON object to `POST /` and view **all unexpired records** with `GET /` in a readable, Unicode-framed terminal output. Each record includes a server-generated `received_at` timestamp.
+
+One endpoint, one shared inbox, no frontend or per-record URLs.
 
 ## Quick start
 
-Install dependencies with Bun, then start the local Worker:
+**Requirements:** [Bun](https://bun.sh/) and [Node.js](https://nodejs.org/) for the Wrangler CLI.
 
 ```sh
 bun install
 bun run dev
 ```
 
-Send a JSON object (POST returns HTTP 204):
+In another terminal, upload a JSON object:
 
 ```sh
-curl -i -X POST http://localhost:8787/ \
+curl -i http://localhost:8787/ \
   -H 'Content-Type: application/json' \
   -d '{"message":"Nightly backup finished","source":"scheduler","duration_ms":428}'
 ```
 
-Read the entire unexpired inbox:
+The upload returns **`204 No Content`**. Retrieve the inbox:
 
 ```sh
 curl -sS http://localhost:8787/
 ```
 
-The response is UTF-8 **text/plain**, with a box-drawing border and the complete set of JSON fields. It looks like this (time is illustrative):
+Example output (timestamp is illustrative):
 
 ```text
 ╭────────────────────────────────────────────────────────────────────────────╮
@@ -41,25 +43,30 @@ The response is UTF-8 **text/plain**, with a box-drawing border and the complete
 ╰────────────────────────────────────────────────────────────────────────────╯
 ```
 
-The number of spaces in the sample above is for illustration; the renderer calculates line widths using terminal display cells rather than JavaScript string length. Additional JSON objects are appended as separate records and displayed in **reverse chronological order**.
+Additional uploads appear as separate entries, **newest first**. The display includes every uploaded field; nested objects and arrays are rendered as JSON, and multiline text is wrapped to the terminal frame.
 
-## API contract
+## API
 
-| Method | Path | Result |
+| Method | Path | Response |
 | --- | --- | --- |
-| `POST` | `/` | Accept a JSON object; retain it for the configured TTL (default **3600 seconds**); respond `204 No Content`. |
-| `GET` | `/` | Render **every unexpired record** as `text/plain; charset=utf-8`. |
+| `POST` | `/` | Accept a JSON object and store it for the configured TTL. Returns `204` on success. |
+| `GET` | `/` | Return all currently unexpired records as `text/plain; charset=utf-8`. |
 
-Only the root route exists. There is **no** `GET /{id}`, no separate JSON endpoint, and no pagination in this MVP. Unknown routes return 404; unsupported methods return 405.
+The API has no record IDs, individual retrieval endpoints, pagination, or web UI.
 
-- The JSON root must be an object, not an array or primitive. Nested objects, arrays, strings, numbers, booleans and null are accepted as field values.
-- The `received_at` key is reserved for the server-generated UTC timestamp; uploads containing that key are rejected with 422.
-- Multiline strings wrap in the terminal; nested JSON is rendered inline as JSON; control characters are escaped or replaced.
-- No HTTP caching: `Cache-Control: no-store` on responses.
+**Upload rules and limits:**
+- The request must use `Content-Type: application/json` and contain a JSON **object** (not an array or primitive).
+- `received_at` is reserved and set by the server in UTC; uploads cannot supply it.
+- Maximum request body: **16 KiB** of UTF-8.
+- Maximum active records: **200**. Further writes return `507` until space becomes available.
+- Invalid requests return an HTTP error: `400` (invalid JSON), `413` (too large), `415` (wrong media type), or `422` (invalid root or reserved field). When write authentication is enabled, unauthorized uploads return `401`.
+- Other routes return `404`; unsupported methods on `/` return `405`.
 
-## Retention configuration
+Responses set `Cache-Control: no-store`. `GET /` is public, even when write authentication is enabled.
 
-Set `TTL_SECONDS` under `vars` in `wrangler.jsonc`:
+## Configuration
+
+Retention is controlled by `TTL_SECONDS` in [`wrangler.jsonc`](wrangler.jsonc):
 
 ```jsonc
 "vars": {
@@ -67,55 +74,42 @@ Set `TTL_SECONDS` under `vars` in `wrangler.jsonc`:
 }
 ```
 
-The value is a positive integer in **seconds**. Change it and redeploy to adjust how long **new uploads** remain available. Each record's expiration is calculated when it is received, so changing this variable does not extend or shorten the lifetime of existing records. Invalid, missing, or overflowing values fail on POST rather than silently falling back to a hardcoded retention period.
+The value is a **positive integer in seconds** (default: **3600**, or one hour). Change it and redeploy to update retention for **new uploads**. Existing records retain their original expiration times. Invalid or missing TTL values cause uploads to fail rather than silently applying an alternative.
 
-## Data retention and Free-plan guardrails
+TextBin uses one **SQLite-backed Durable Object** to store the shared inbox. Reads exclude expired records immediately; a Durable Object Alarm removes expired data from storage afterward. No separate KV, D1, or Cron configuration is required.
 
-Data is stored in one **SQLite-backed Durable Object**. Each record has a server-assigned receive timestamp and an expiration timestamp calculated from `TTL_SECONDS`.
+### Write authentication
 
-- **Logical expiration:** every GET excludes rows whose `expires_at` has passed, including before physical cleanup.
-- **Physical cleanup:** a Durable Object Alarm deletes expired rows and reschedules itself for the next expiration.
-- A maximum **16 KiB** JSON request body (measured as UTF-8 bytes).
-- A maximum **200 simultaneously unexpired records**. On reaching capacity, POST returns 507 rather than silently dropping entries.
-- Requests to the same named Durable Object have strongly consistent storage operations; a single board is appropriate for a small tool, not an unbounded high-throughput ingestion service.
-- Anyone who can GET the service can read the whole board. Do not post secrets or private data.
+By default, anyone who can reach the Worker can upload. To require a bearer token for `POST /`, configure the optional `WRITE_TOKEN` secret:
 
-An optional `WRITE_TOKEN` secret protects POST. **Set it before publicly deploying**:
+```sh
+bunx wrangler secret put WRITE_TOKEN
+```
+
+Then include `Authorization: Bearer <token>` when posting. **The inbox remains publicly readable.** Do not upload credentials, secrets, or private data.
+
+## Deployment
+
+Sign in to Cloudflare and deploy:
 
 ```sh
 bunx wrangler login
-bunx wrangler secret put WRITE_TOKEN
 bun run deploy
 ```
 
-If `WRITE_TOKEN` is configured, include `Authorization: Bearer <token>` when uploading. GET remains publicly accessible.
+**Public URL configuration is required.** The repository sets `workers_dev: false` and `preview_urls: false`, and does not supply a domain or route. Attach a **Custom Domain** or configure a **Worker Route** in Cloudflare before expecting the deployed Worker to be accessible publicly.
 
-## Continuous integration
+For a public instance, configure `WRITE_TOKEN` before accepting uploads. Review the Workers Free and Durable Objects quotas for your expected usage.
 
-GitHub Actions runs on pushes to `main`, pull requests, and manual dispatch. It uses the latest major-version action tags (`actions/checkout@v7` and `oven-sh/setup-bun@v2`) to install Bun, typecheck TypeScript, run Bun tests, and verify the Wrangler production bundle with `deploy --dry-run`. The workflow does not deploy and does not require Cloudflare credentials.
-
-The repository does not yet include a `bun.lock` file, so CI uses `bun install`. Once a Bun-generated lockfile is committed, the install step can be tightened to `bun install --frozen-lockfile`.
-
-## Development and validation
+## Development and CI
 
 ```sh
-bun run typecheck
-bun test
-bun run check
+bun run check                    # Generate Worker types, typecheck, and run Bun tests
+bunx wrangler deploy --dry-run  # Validate the Worker bundle without deploying
 ```
 
-`typecheck` first generates Worker type declarations via Wrangler, then checks the project with the pinned TypeScript 7.1 Beta for the ES2026 target. The lockfile `bun.lock` should be generated and committed after the first successful `bun install`.
+GitHub Actions runs these checks on pushes to `main`, pull requests, and manual dispatch. CI uses `actions/checkout@v7` and `oven-sh/setup-bun@v2`; it does **not** deploy to Cloudflare or require deployment credentials.
 
-Bun manages dependencies and executes the project scripts and tests. Wrangler requires the supported Node.js CLI runtime, so `bunx wrangler` intentionally runs Wrangler through its Node.js shebang without `--bun`. This is only a build/development tool: the deployed Worker runs in Cloudflare's **workerd** and contains no Node.js application runtime APIs.
+Bun manages dependencies and runs the tests. Wrangler is invoked via `bunx wrangler` **without `--bun`** because its CLI requires Node.js. The deployed Worker runs on Cloudflare's `workerd`, not Node.js. The repository does not yet include `bun.lock`; CI currently runs `bun install` rather than a frozen install.
 
-For decisions, constraints, and acceptance criteria, see [docs/PLAN.md](docs/PLAN.md).
-
-
-## Layout
-
-- `src/index.ts`: only `GET /` and `POST /`; routes both to the same Durable Object.
-- `src/board.ts`: SQLite records, configurable expiration, Alarm cleanup, capacity guardrails.
-- `src/retention.ts`: validates configured TTL and calculates per-record expiration.
-- `src/renderer.ts`: terminal layout, safe text, Unicode/CJK display width.
-- `src/validation.ts`: streamed UTF-8 byte limit and JSON object validation.
-- `tests/`: Bun unit tests for input and rendering.
+For implementation details and acceptance criteria, see [docs/PLAN.md](docs/PLAN.md). License details are in [LICENSE](LICENSE).
