@@ -1,6 +1,6 @@
 # TextBin
 
-**TextBin** is a one-hour JSON inbox rendered as a Unicode plain-text board for `curl`. Send JSON to **POST /**, then use **GET /** to view **all** unexpired records, newest first. Each record includes the UTC time at which TextBin received it.
+**TextBin** is a temporary JSON inbox rendered as a Unicode plain-text board for `curl`. Send JSON to **POST /**, then use **GET /** to view **all** unexpired records, newest first. Each record includes the UTC time at which TextBin received it.
 
 Built for **Cloudflare Workers Free**, **SQLite-backed Durable Objects**, **TypeScript (ES2026)**, and **Bun**. No web frontend, per-record URLs, ORM, or application-level Node.js APIs.
 
@@ -21,7 +21,7 @@ curl -i -X POST http://localhost:8787/ \
   -d '{"message":"Nightly backup finished","source":"scheduler","duration_ms":428}'
 ```
 
-Read the entire one-hour inbox:
+Read the entire unexpired inbox:
 
 ```sh
 curl -sS http://localhost:8787/
@@ -47,7 +47,7 @@ The number of spaces in the sample above is for illustration; the renderer calcu
 
 | Method | Path | Result |
 | --- | --- | --- |
-| `POST` | `/` | Accept a JSON object; store it for **3600 seconds**; respond `204 No Content`. |
+| `POST` | `/` | Accept a JSON object; retain it for the configured TTL (default **3600 seconds**); respond `204 No Content`. |
 | `GET` | `/` | Render **every unexpired record** as `text/plain; charset=utf-8`. |
 
 Only the root route exists. There is **no** `GET /{id}`, no separate JSON endpoint, and no pagination in this MVP. Unknown routes return 404; unsupported methods return 405.
@@ -57,9 +57,21 @@ Only the root route exists. There is **no** `GET /{id}`, no separate JSON endpoi
 - Multiline strings wrap in the terminal; nested JSON is rendered inline as JSON; control characters are escaped or replaced.
 - No HTTP caching: `Cache-Control: no-store` on responses.
 
+## Retention configuration
+
+Set `TTL_SECONDS` under `vars` in `wrangler.jsonc`:
+
+```jsonc
+"vars": {
+  "TTL_SECONDS": 3600
+}
+```
+
+The value is a positive integer in **seconds**. Change it and redeploy to adjust how long **new uploads** remain available. Each record's expiration is calculated when it is received, so changing this variable does not extend or shorten the lifetime of existing records. Invalid, missing, or overflowing values fail on POST rather than silently falling back to a hardcoded retention period.
+
 ## Data retention and Free-plan guardrails
 
-Data is stored in one **SQLite-backed Durable Object**. Each record has a server-assigned receive timestamp and an expiration timestamp one hour later.
+Data is stored in one **SQLite-backed Durable Object**. Each record has a server-assigned receive timestamp and an expiration timestamp calculated from `TTL_SECONDS`.
 
 - **Logical expiration:** every GET excludes rows whose `expires_at` has passed, including before physical cleanup.
 - **Physical cleanup:** a Durable Object Alarm deletes expired rows and reschedules itself for the next expiration.
@@ -96,7 +108,8 @@ For decisions, constraints, and acceptance criteria, see [docs/PLAN.md](docs/PLA
 ## Layout
 
 - `src/index.ts`: only `GET /` and `POST /`; routes both to the same Durable Object.
-- `src/board.ts`: SQLite records, one-hour expiration, Alarm cleanup, capacity guardrails.
+- `src/board.ts`: SQLite records, configurable expiration, Alarm cleanup, capacity guardrails.
+- `src/retention.ts`: validates configured TTL and calculates per-record expiration.
 - `src/renderer.ts`: terminal layout, safe text, Unicode/CJK display width.
 - `src/validation.ts`: streamed UTF-8 byte limit and JSON object validation.
 - `tests/`: Bun unit tests for input and rendering.

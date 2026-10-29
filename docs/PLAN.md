@@ -2,7 +2,7 @@
 
 ## Goal
 
-A temporary, root-route-only inbox for **complete JSON objects**. Every upload remains visible for exactly **one hour** and can be viewed alongside other unexpired uploads as a single, human-readable, UTF-8 **plain-text** dashboard from `curl`.
+A temporary, root-route-only inbox for **complete JSON objects**. Every upload remains visible for the configured **TTL** (default: **3600 seconds**) and can be viewed alongside other unexpired uploads as a single, human-readable, UTF-8 **plain-text** dashboard from `curl`.
 
 ## Contract (fixed)
 
@@ -37,9 +37,9 @@ Single named Durable Object (one global board), SQLite table `records`:
 | `id` | INTEGER PRIMARY KEY | Internal deterministic tie-break; never exposed. |
 | `payload` | TEXT | Entire original JSON body. |
 | `received_at` | INTEGER | Server-assigned UTC epoch milliseconds. |
-| `expires_at` | INTEGER | `received_at + 3,600,000`. |
+| `expires_at` | INTEGER | `received_at + TTL_SECONDS * 1000`. |
 
-`GET` filters `expires_at > now`, orders by `received_at DESC, id DESC`, and renders the complete result. An Alarm opportunistically deletes expired rows. The alarm is **not** relied on for exact read-time expiration.
+On POST, `TTL_SECONDS` is read from the Wrangler `vars` binding and validated as a positive integer. The default is configured in `wrangler.jsonc` (3600 seconds), not hardcoded in source. Each record keeps the expiry determined at ingestion, even if the configuration later changes. `GET` filters `expires_at > now`, orders by `received_at DESC, id DESC`, and renders the complete result. An Alarm opportunistically deletes expired rows. The alarm is **not** relied on for exact read-time expiration.
 
 ## Terminal renderer
 
@@ -73,7 +73,7 @@ Single named Durable Object (one global board), SQLite table `records`:
 1. Posting a valid JSON object to `/` returns 204 without a generated ID or URL.
 2. Reading `/` displays all unexpired objects and the precise server receipt time **within each record**.
 3. Output is readable in a normal UTF-8 terminal, including CJK text and multiline values.
-4. Data uploaded 3600 seconds ago or earlier is not returned, even if cleanup has not run.
+4. Data is no longer returned when `received_at + TTL_SECONDS * 1000` has passed, using the TTL captured when it was uploaded, even if cleanup has not run.
 5. Invalid JSON, unsupported methods/routes, oversized requests, and reserved fields are rejected.
 6. The source tree contains no Node.js runtime API dependency.
 7. Development, tests and deployment are driven through Bun scripts; Cloudflare itself runs the Worker.

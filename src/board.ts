@@ -1,9 +1,9 @@
 import { DurableObject } from "cloudflare:workers";
 import { renderBoard } from "./renderer";
+import { calculateExpiration } from "./retention";
 import type { Env, StoredRecord } from "./types";
 import { InputError, parseJsonObject, readBodyWithinLimit } from "./validation";
 
-const TTL_MS = 60 * 60 * 1000;
 const MAX_BODY_BYTES = 16 * 1024;
 const MAX_ACTIVE_RECORDS = 200;
 
@@ -75,7 +75,7 @@ export class Board extends DurableObject<Env> {
         return errorResponse("Board is full; retry after older records expire", 507);
       }
 
-      const expiresAt = now + TTL_MS;
+      const expiresAt = calculateExpiration(now, this.env.TTL_SECONDS);
       this.ctx.storage.sql.exec(
         "INSERT INTO records (payload, received_at, expires_at) VALUES (?, ?, ?)",
         rawBody,
