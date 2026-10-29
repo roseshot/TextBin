@@ -24,6 +24,14 @@ describe("TextBin JSON input", () => {
     }
   });
 
+  test("rejects excessive nesting and too many nested entries", () => {
+    const deep = '{"a":'.repeat(34) + "0" + "}".repeat(34);
+    expect(() => parseJsonObject(deep)).toThrow(InputError);
+    const many = Object.fromEntries(Array.from({ length: 129 }, (_, i) => ["k" + i, i]));
+    expect(() => parseJsonObject(JSON.stringify(many))).toThrow(InputError);
+    expect(parseJsonObject('{"a":{"b":[1,2,3]}}')).toEqual({ a: { b: [1, 2, 3] } });
+  });
+
   test("limits actual streamed request bytes", async () => {
     const request = new Request("https://textbin.test/", {
       method: "POST",

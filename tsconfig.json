@@ -1,7 +1,7 @@
 {
   "compilerOptions": {
-    "target": "ES2026",
-    "lib": ["ES2026"],
+    "target": "ES2025",
+    "lib": ["ES2025"],
     "module": "ESNext",
     "moduleResolution": "Bundler",
     "types": ["./worker-configuration.d.ts"],

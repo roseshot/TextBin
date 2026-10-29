@@ -7,6 +7,10 @@
   "workers_dev": false,
   "preview_urls": false,
   "upload_source_maps": true,
+  "ratelimits": [
+    { "name": "READ_RATE_LIMITER", "namespace_id": "73140281", "simple": { "limit": 120, "period": 60 } },
+    { "name": "WRITE_RATE_LIMITER", "namespace_id": "73140282", "simple": { "limit": 30, "period": 60 } }
+  ],
   "vars": {
     "TTL_SECONDS": 3600
   },

@@ -8,6 +8,10 @@ export class InputError extends Error {
   }
 }
 
+// A byte limit alone does not bound recursive JSON serialization or display cost.
+export const MAX_JSON_DEPTH = 32;
+export const MAX_JSON_ENTRIES = 128;
+
 export function parseJsonObject(body: string): Record<string, unknown> {
   let value: unknown;
   try {
@@ -19,12 +23,32 @@ export function parseJsonObject(body: string): Record<string, unknown> {
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
     throw new InputError("JSON root must be an object", 422);
   }
-
-  // Keep the server-generated timestamp authoritative, without dropping input.
   if (Object.hasOwn(value, "received_at")) {
     throw new InputError("received_at is a reserved field", 422);
   }
 
+  let entries = 0;
+  const pending: { value: unknown; depth: number }[] = [{ value, depth: 0 }];
+  while (pending.length > 0) {
+    const current = pending.pop()!;
+    if (current.value === null || typeof current.value !== "object") continue;
+    if (current.depth > MAX_JSON_DEPTH) {
+      throw new InputError("JSON exceeds maximum nesting depth", 422);
+    }
+
+    const children = Array.isArray(current.value)
+      ? current.value
+      : Object.values(current.value);
+    entries += children.length;
+    if (entries > MAX_JSON_ENTRIES) {
+      throw new InputError("JSON contains too many fields or array elements", 422);
+    }
+    for (const child of children) {
+      if (child !== null && typeof child === "object") {
+        pending.push({ value: child, depth: current.depth + 1 });
+      }
+    }
+  }
   return value as Record<string, unknown>;
 }
 

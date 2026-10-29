@@ -39,7 +39,7 @@ Single named Durable Object (one global board), SQLite table `records`:
 | `received_at` | INTEGER | Server-assigned UTC epoch milliseconds. |
 | `expires_at` | INTEGER | `received_at + TTL_SECONDS * 1000`. |
 
-On POST, `TTL_SECONDS` is read from the Wrangler `vars` binding and validated as a positive integer. The default is configured in `wrangler.jsonc` (3600 seconds), not hardcoded in source. Each record keeps the expiry determined at ingestion, even if the configuration later changes. `GET` filters `expires_at > now`, orders by `received_at DESC, id DESC`, and renders the complete result. An Alarm opportunistically deletes expired rows. The alarm is **not** relied on for exact read-time expiration.
+On POST, `TTL_SECONDS` is read from the Wrangler `vars` binding and validated as a positive integer. The default is configured in `wrangler.jsonc` (3600 seconds), not hardcoded in source. Each record keeps the expiry determined at ingestion, even if the configuration later changes. `GET` filters `expires_at > now`, orders by `received_at DESC, id DESC`, and renders the complete result. An Alarm opportunistically deletes expired rows, retries cleanup after errors, and can be restored by a later GET. Upload and alarm scheduling run in a storage transaction. The alarm is **not** relied on for exact read-time expiration.
 
 ## Terminal renderer
 
@@ -55,15 +55,18 @@ On POST, `TTL_SECONDS` is read from the Wrangler `vars` binding and validated as
 
 - **Worker runtime:** Cloudflare `workerd` (Workers Free).
 - **Storage:** Durable Objects SQLite with Cloudflare declarative `exports` configuration.
-- **Type checking:** TypeScript 7.1 Beta with `ES2026` target and lib, strict mode.
+- **Type checking:** TypeScript 7.0 with `ES2025` target and lib, strict mode.
 - **Local package manager, scripts, and tests:** Bun; no Node.js imports or Bun runtime APIs inside the deployed code.
 - **Wrangler CLI:** invoked through `bunx wrangler` (without `--bun`), allowing its supported Node.js CLI runtime. Bun remains the dependency manager, test runner, and script runner; the deployed Worker uses `workerd`.
 
 ## Guardrails
 
 - Up to 16 KiB incoming JSON per POST; streaming reader enforces actual byte count.
+- Limit JSON depth to 32 and total nested object properties/array elements to 128.
+- Bound the rendered size of each record to 128 lines; isolate legacy corrupt or oversized records during reads.
+- Apply approximate Worker-edge rate limiting per client IP and Cloudflare location: 120 GET/minute and 30 POST/minute.
 - Maximum 200 unexpired records; an over-capacity POST is rejected with 507.
-- Optional Bearer secret protects POST. GET is intentionally public. Avoid sensitive data.
+- Optional Bearer secret protects POST. Anonymous uploads remain enabled when the secret is absent; GET is intentionally public. Avoid sensitive data.
 - Incoming `received_at` is rejected to prevent spoofing the server timestamp.
 - Unsupported content types and invalid input return 4xx statuses, with JSON error bodies.
 

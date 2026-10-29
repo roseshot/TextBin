@@ -3,29 +3,28 @@ import type { StoredRecord } from "./types";
 const FRAME_WIDTH = 78;
 const CONTENT_WIDTH = FRAME_WIDTH - 4;
 const MAX_LABEL_WIDTH = 24;
+export const MAX_RECORD_LINES = 128;
 const segmenter = new Intl.Segmenter(undefined, { granularity: "grapheme" });
 
-// Counts terminal display cells rather than JavaScript string units.
+// The input is already a grapheme; avoid segmenting it a second time.
+function graphemeWidth(segment: string): number {
+  if (/^[\p{Mark}\p{Format}]+$/u.test(segment)) return 0;
+  if (/[\p{Extended_Pictographic}\p{Regional_Indicator}]/u.test(segment)) return 2;
+  const point = segment.codePointAt(0) ?? 0;
+  return (
+    (point >= 0x1100 && point <= 0x115f) ||
+    (point >= 0x2e80 && point <= 0xa4cf) ||
+    (point >= 0xac00 && point <= 0xd7a3) ||
+    (point >= 0xf900 && point <= 0xfaff) ||
+    (point >= 0xfe10 && point <= 0xfe6f) ||
+    (point >= 0xff01 && point <= 0xff60) ||
+    (point >= 0xffe0 && point <= 0xffe6)
+  ) ? 2 : 1;
+}
+
 export function displayWidth(text: string): number {
   let width = 0;
-  for (const { segment } of segmenter.segment(text)) {
-    if (/^[\p{Mark}\p{Format}]+$/u.test(segment)) continue;
-    if (/[\p{Extended_Pictographic}\p{Regional_Indicator}]/u.test(segment)) {
-      width += 2;
-      continue;
-    }
-    const point = segment.codePointAt(0) ?? 0;
-    width +=
-      (point >= 0x1100 && point <= 0x115f) ||
-      (point >= 0x2e80 && point <= 0xa4cf) ||
-      (point >= 0xac00 && point <= 0xd7a3) ||
-      (point >= 0xf900 && point <= 0xfaff) ||
-      (point >= 0xfe10 && point <= 0xfe6f) ||
-      (point >= 0xff01 && point <= 0xff60) ||
-      (point >= 0xffe0 && point <= 0xffe6)
-        ? 2
-        : 1;
-  }
+  for (const { segment } of segmenter.segment(text)) width += graphemeWidth(segment);
   return width;
 }
 
@@ -34,7 +33,7 @@ function safeText(value: string): string {
     .replace(/\r\n?/g, "\n")
     .replace(/\t/g, "  ")
     .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f]/g, "�")
-    .replace(/[\u202a-\u202e\u2066-\u2069]/gi, "�");
+    .replace(/[\u061c\u200e-\u200f\u202a-\u202e\u2066-\u2069]/g, "�");
 }
 
 function pad(text: string, width: number): string {
@@ -46,7 +45,7 @@ function wrap(line: string, width: number): string[] {
   let chunk = "";
   let used = 0;
   for (const { segment } of segmenter.segment(line)) {
-    const size = displayWidth(segment);
+    const size = graphemeWidth(segment);
     if (used + size > width && chunk) {
       result.push(chunk);
       chunk = "";
@@ -75,11 +74,9 @@ function row(line = ""): string[] {
 function field(key: string, value: unknown, labelWidth: number): string[] {
   const label = safeText(key).replace(/\n/g, "\\n") || '""';
   const text = formatValue(value);
-
   if (displayWidth(label) > MAX_LABEL_WIDTH) {
     return row(label + ": " + text);
   }
-
   const prefix = "  " + pad(label, labelWidth) + "  ";
   const indent = " ".repeat(displayWidth(prefix));
   const available = Math.max(1, CONTENT_WIDTH - displayWidth(prefix));
@@ -88,6 +85,31 @@ function field(key: string, value: unknown, labelWidth: number): string[] {
       cell((index === 0 && partIndex === 0 ? prefix : indent) + part),
     ),
   );
+}
+
+// Throws for malformed or unusually expensive records; POST rejects them,
+// while GET isolates previously stored invalid or oversized records.
+export function renderRecordLines(record: StoredRecord, index: number): string[] {
+  const data: unknown = JSON.parse(record.payload);
+  if (data === null || typeof data !== "object" || Array.isArray(data)) {
+    throw new Error("Invalid stored JSON object");
+  }
+  const fields: [string, unknown][] = [
+    ...Object.entries(data),
+    ["received_at", new Date(record.received_at).toISOString()],
+  ];
+  const labelWidth = Math.min(
+    MAX_LABEL_WIDTH,
+    Math.max(0, ...fields.map(([key]) => displayWidth(safeText(key)))),
+  );
+  const lines = [cell("  #" + index)];
+  for (const [key, value] of fields) {
+    lines.push(...field(key, value, labelWidth));
+    if (lines.length > MAX_RECORD_LINES) {
+      throw new Error("Record exceeds terminal display budget");
+    }
+  }
+  return lines;
 }
 
 export function renderBoard(records: readonly StoredRecord[]): string {
@@ -102,18 +124,10 @@ export function renderBoard(records: readonly StoredRecord[]): string {
 
   for (const [index, record] of records.entries()) {
     lines.push("├" + "─".repeat(FRAME_WIDTH - 2) + "┤");
-    lines.push(cell("  #" + (index + 1)));
-    const data = JSON.parse(record.payload) as Record<string, unknown>;
-    const fields: [string, unknown][] = [
-      ...Object.entries(data),
-      ["received_at", new Date(record.received_at).toISOString()],
-    ];
-    const labelWidth = Math.min(
-      MAX_LABEL_WIDTH,
-      Math.max(0, ...fields.map(([key]) => displayWidth(safeText(key)))),
-    );
-    for (const [key, value] of fields) {
-      lines.push(...field(key, value, labelWidth));
+    try {
+      lines.push(...renderRecordLines(record, index + 1));
+    } catch {
+      lines.push(cell("  #" + (index + 1)), ...row("  [Record unavailable: invalid or oversized data]"));
     }
   }
 

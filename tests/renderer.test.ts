@@ -28,6 +28,18 @@ describe("TextBin terminal board", () => {
     expect(output).not.toContain("[object Object]");
   });
 
+  test("isolates corrupt, oversized, and deeply nested legacy records", () => {
+    const deep = '{"a":'.repeat(7000) + "0" + "}".repeat(7000);
+    const output = renderBoard([
+      { payload: '{"valid":true}', received_at: 0 },
+      { payload: "{broken}", received_at: 0 },
+      { payload: JSON.stringify({ note: "x".repeat(12000) }), received_at: 0 },
+      { payload: deep, received_at: 0 },
+    ]);
+    expect(output).toContain("valid");
+    expect(output.match(/Record unavailable/g)?.length).toBe(3);
+  });
+
   test("shows a human-readable empty board", () => {
     expect(renderBoard([])).toContain("No data available.");
   });
@@ -43,6 +55,7 @@ describe("TextBin terminal board", () => {
     expect(output).toContain("Line two");
     expect(output).not.toContain("\u001b");
     expect(displayWidth("\u4e2d\u6587ab")).toBe(6);
+    expect(renderBoard([{ payload: JSON.stringify({ key: "safe\u200e" }), received_at: 0 }])).not.toContain("\u200e");
     for (const line of output.trimEnd().split("\n")) {
       expect(displayWidth(line)).toBe(78);
     }
