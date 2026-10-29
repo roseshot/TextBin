@@ -1,0 +1,18 @@
+{
+  "name": "textbin",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "bunx --bun wrangler dev",
+    "deploy": "bunx --bun wrangler deploy",
+    "types": "bunx --bun wrangler types",
+    "typecheck": "bun run types && bunx tsc --noEmit",
+    "test": "bun test",
+    "check": "bun run typecheck && bun test"
+  },
+  "devDependencies": {
+    "typescript": "7.1.0-beta",
+    "wrangler": "4.152.0"
+  }
+}

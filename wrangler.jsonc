@@ -1,0 +1,15 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "textbin",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-29",
+  "compatibility_flags": ["no_nodejs_compat", "no_nodejs_compat_v2"],
+  "durable_objects": {
+    "bindings": [
+      { "name": "BOARD", "class_name": "Board" }
+    ]
+  },
+  "exports": {
+    "Board": { "type": "durable-object", "storage": "sqlite" }
+  }
+}
