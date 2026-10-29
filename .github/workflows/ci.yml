@@ -33,6 +33,12 @@ jobs:
       - name: Install dependencies
         run: bun install
 
+      - name: Record dependency lock for reproducibility
+        run: |
+          echo LOCKFILE_B64_START
+          base64 -w0 bun.lock | fold -w2000 | sed 's/^/LOCKFILE_PART:/'
+          echo LOCKFILE_B64_END
+
       - name: Typecheck
         run: bun run typecheck
 
