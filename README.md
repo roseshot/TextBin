@@ -90,6 +90,12 @@ bun run deploy
 
 If `WRITE_TOKEN` is configured, include `Authorization: Bearer <token>` when uploading. GET remains publicly accessible.
 
+## Continuous integration
+
+GitHub Actions runs on pushes to `main`, pull requests, and manual dispatch. It uses the latest major-version action tags (`actions/checkout@v6` and `oven-sh/setup-bun@v2`) to install Bun, typecheck TypeScript, run Bun tests, and verify the Wrangler production bundle with `deploy --dry-run`. The workflow does not deploy and does not require Cloudflare credentials.
+
+The repository does not yet include a `bun.lock` file, so CI uses `bun install`. Once a Bun-generated lockfile is committed, the install step can be tightened to `bun install --frozen-lockfile`.
+
 ## Development and validation
 
 ```sh
