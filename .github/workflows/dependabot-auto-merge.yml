@@ -1,0 +1,43 @@
+name: Dependabot auto-merge
+
+# Run in a trusted, writable context only after the read-only PR CI has finished.
+on:
+  workflow_run:
+    workflows:
+      - CI
+    types:
+      - completed
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  merge:
+    name: Merge Dependabot PR after successful CI
+    if: >-
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Merge successful Dependabot PRs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          CI_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          CI_PULL_REQUESTS: ${{ toJSON(github.event.workflow_run.pull_requests) }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          for pr in $(jq -r '.[].number' <<< "$CI_PULL_REQUESTS"); do
+            details=$(gh api "repos/$REPOSITORY/pulls/$pr")
+            if ! jq -e --arg sha "$CI_HEAD_SHA" --arg repo "$REPOSITORY" \
+              '.user.login == "dependabot[bot]" and
+               .state == "open" and
+               .head.sha == $sha and
+               .head.repo.full_name == $repo' <<< "$details" >/dev/null; then
+              continue
+            fi
+            gh api --method PUT "repos/$REPOSITORY/pulls/$pr/merge" \
+              -f sha="$CI_HEAD_SHA" -f merge_method=squash
+          done
