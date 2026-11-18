@@ -108,9 +108,9 @@ For a public instance, consider configuring `WRITE_TOKEN` to restrict uploads. A
 
 Dependabot checks Bun dependencies (`package.json` and `bun.lock`) and GitHub Actions every **Monday at 09:00 UTC**. It opens at most five version-update PRs per ecosystem.
 
-This repository uses GitHub's native **Allow auto-merge** setting. There is no custom Dependabot merge workflow or privileged merge script. Dependabot does not automatically enable native auto-merge for each PR: enable it on the desired PR, or arrange separate trusted automation to opt in.
+**Every Dependabot PR auto-merges once its PR CI succeeds**, including major, minor, patch, prerelease, and GitHub Actions dependency updates. There are no version or dependency-type filters, and no manual auto-merge opt-in is required.
 
-To ensure a PR waits for CI before merging, protect `main` with the required **Typecheck, test, and bundle** status check. Without required checks or reviews, selecting native auto-merge may merge a PR immediately. Review major, prerelease, and breaking updates before enabling auto-merge.
+The [Dependabot auto-merge workflow](.github/workflows/dependabot-auto-merge.yml) runs after the `CI` workflow completes successfully for a pull request. It verifies that the PR was authored by `dependabot[bot]` and that the tested commit is still the current PR head, then squash-merges it. Failed/cancelled CI or a newer untested PR commit will not merge. It does not rely on branch protection or the native per-PR auto-merge setting; GitHub merge conflicts or enforced repository rules may still block a merge.
 
 ## Development and CI
 
